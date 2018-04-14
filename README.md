@@ -1,8 +1,12 @@
 # A Seven Segment Counter
 
+![It's live !](images/video.gif)
+
 ## Description
 
 In this project, I reused an old "seven segment display" salvaged from a microwave oven to build a counter. The project is based on an Arduino Nano. 
+
+[![Breadboard Arrangement](images/breadboard_small.jpg)](images/breadboard_large.jpg)
 
 ## How it works
 
