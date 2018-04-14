@@ -36,12 +36,19 @@
 /*
  * The seven segment display has a common cathode for each digit
  */
-#define CATHODE_1000_PIN 1
-#define CATHODE_100_PIN 13
-#define CATHODE_10_PIN 3
-#define CATHODE_1_PIN 4
+#define CATHODE_1000_PIN B00000001
+#define CATHODE_100_PIN B00000010
+#define CATHODE_10_PIN B00000100
+#define CATHODE_1_PIN B00001000
 // The splitter is the colon between the second and third digit
-#define CATHODE_SPLITTER_PIN 0
+#define CATHODE_SPLITTER_PIN B00010000
+
+/*
+ * All the cathodes are connected to PORTB's pins
+ * 
+ */
+#define CATHODE_PORT PORTB
+#define CATHODE_DDR DDRB
 
 /*
  * The anodes will light up a segment when it is LOW and the cathode is HIGH.
@@ -49,13 +56,20 @@
  * The anode numbering refers to the standard numbering:
  * https://en.wikipedia.org/wiki/Seven-segment_display
  */
-#define ANODE_A_PIN 11
-#define ANODE_B_PIN 10
-#define ANODE_C_PIN 9
-#define ANODE_D_PIN 8
-#define ANODE_E_PIN 7
-#define ANODE_F_PIN 6
-#define ANODE_G_PIN 5
+#define ANODE_A_PIN B10000000
+#define ANODE_B_PIN B01000000
+#define ANODE_C_PIN B00100000
+#define ANODE_D_PIN B00010000
+#define ANODE_E_PIN B00001000
+// Yes, there is a gap since pin 2 is used for the button 
+#define ANODE_F_PIN B00000010
+#define ANODE_G_PIN B00000001
+
+/*
+ * All the anodes are connected to PORTD's pins
+ */
+#define ANODE_PORT PORTD
+#define ANODE_DDR DDRD
 
 /*
  * The number of milliseconds to wait in order to let the retinal persistence do its job. 
@@ -75,32 +89,36 @@
 #define DELAY_DEBUG 
 #endif
 
-// The state of each anode for each number between 0 and 9
-#define ANODE_A_STATE(x) (x != 4 && x != 1 ? LOW : HIGH)
-#define ANODE_B_STATE(x) (x != 5 && x != 6 ? LOW : HIGH)
-#define ANODE_C_STATE(x) (x != 2 ? LOW : HIGH)
-#define ANODE_D_STATE(x) (x != 1 && x != 4 && x != 7 ? LOW : HIGH)
-#define ANODE_E_STATE(x) (x != 0 && x != 2 && x != 6 && x != 8 ? HIGH : LOW)
-#define ANODE_F_STATE(x) (x != 1 && x != 2 && x != 3 && x != 7 ? LOW : HIGH)
-#define ANODE_G_STATE(x) (x != 0 && x != 1 && x != 7 ? LOW : HIGH)
+/*
+ * Lookup table to drive the anode pins according to a digit between 0 and 9
+ */
+byte digit[] = {
+  /* 0 */ ANODE_A_PIN|ANODE_B_PIN|ANODE_C_PIN|ANODE_D_PIN|ANODE_E_PIN|ANODE_F_PIN,
+  /* 1 */ ANODE_B_PIN|ANODE_C_PIN,
+  /* 2 */ ANODE_A_PIN|ANODE_B_PIN|ANODE_D_PIN|ANODE_E_PIN|ANODE_G_PIN,
+  /* 3 */ ANODE_A_PIN|ANODE_B_PIN|ANODE_C_PIN|ANODE_D_PIN|ANODE_G_PIN,
+  /* 4 */ ANODE_B_PIN|ANODE_C_PIN|ANODE_F_PIN|ANODE_G_PIN,
+  /* 5 */ ANODE_A_PIN|ANODE_C_PIN|ANODE_D_PIN|ANODE_F_PIN|ANODE_G_PIN,
+  /* 6 */ ANODE_A_PIN|ANODE_C_PIN|ANODE_D_PIN|ANODE_E_PIN|ANODE_F_PIN|ANODE_G_PIN,
+  /* 7 */ ANODE_A_PIN|ANODE_B_PIN|ANODE_C_PIN,
+  /* 8 */ ANODE_A_PIN|ANODE_B_PIN|ANODE_C_PIN|ANODE_D_PIN|ANODE_E_PIN|ANODE_F_PIN|ANODE_G_PIN,
+  /* 9 */ ANODE_A_PIN|ANODE_B_PIN|ANODE_C_PIN|ANODE_D_PIN|ANODE_F_PIN|ANODE_G_PIN
+};
 
 // All the cathodes
-const int cathodes[] = {CATHODE_1000_PIN, CATHODE_100_PIN, CATHODE_10_PIN, CATHODE_1_PIN, CATHODE_SPLITTER_PIN};
+const byte cathodes = CATHODE_1000_PIN | CATHODE_100_PIN | CATHODE_10_PIN | CATHODE_1_PIN | CATHODE_SPLITTER_PIN;
 
 // All the anodes
-const int anodes[] = {ANODE_A_PIN, ANODE_B_PIN, ANODE_C_PIN, ANODE_D_PIN, ANODE_E_PIN, ANODE_F_PIN, ANODE_G_PIN};
+const byte anodes = ANODE_A_PIN|ANODE_B_PIN|ANODE_C_PIN|ANODE_D_PIN|ANODE_E_PIN|ANODE_F_PIN|ANODE_G_PIN;
 
 void setup() {
-  // cathodes as output with default to LOW
-  for (int i = 0; i < sizeof(cathodes)/sizeof(cathodes[0]); i++) {
-    pinMode(cathodes[i], OUTPUT);
-    digitalWrite(cathodes[i], LOW);
-  }
-  // anodes as output with default to HIGH
-  for (int i = 0; i < sizeof(anodes)/sizeof(anodes[0]); i++) {
-    pinMode(anodes[i], OUTPUT);
-    digitalWrite(anodes[i], HIGH);
-  }
+  // initialize cathodes pins as output with default to LOW
+  CATHODE_DDR |= cathodes;
+  CATHODE_PORT &= ~cathodes;
+  
+  // initialize anodes pins as output with default to HIGH
+  ANODE_DDR |= anodes;
+  ANODE_PORT |= anodes;
   
   // Enable the button and register an interrupt
   pinMode(BUTTON_PIN, INPUT);
@@ -108,43 +126,51 @@ void setup() {
 }
 
 // the counter is later incremented by an interrupt
-volatile int counter = 0;
-
+volatile byte counter[] = {0,0,0,0};
 
 void button_interrupt() {
-  counter++;
+  if (counter[0] >= 9) {
+    counter[0] = 0;
+    if (counter[1] >= 9) {
+      counter[1] = 0;
+      if (counter[2] >= 9) {
+        counter[2] = 0;
+        if (counter[3] >= 9) {
+          // Overflow
+          counter[3] = 0;
+        } else {
+          counter[3]++;
+        }
+      } else {
+        counter[2]++;
+      }
+    } else {
+      counter[1]++;
+    }
+  } else {
+    counter[0]++;
+  }
 }
 
+const byte digit_cathodes[] = { CATHODE_1_PIN, CATHODE_10_PIN, CATHODE_100_PIN, CATHODE_1000_PIN };
+
 void loop() {
-  int n = counter;
+  // Iterate over the four digits to display
+  for (byte c = 0; c < 4; c++) {
+    // Set all cathodes pins to LOW
+    CATHODE_PORT &= ~(CATHODE_1_PIN|CATHODE_10_PIN|CATHODE_100_PIN|CATHODE_1000_PIN);
+    DELAY_DEBUG
+    
+    // Drive the matching anodes of the digit (a segment is enabled when the matching pin is LOW)
+    ANODE_PORT = ~digit[counter[c]];
+    DELAY_DEBUG
 
-  // Base 10 conversion
-  int n1 = n % 10;
-  int n10 = ((n - n1) % 100) / 10;
-  int n100 = ((n - n1 - n10 * 10) % 1000) / 100;
-  int n1000 = ((n - n1 - n10 * 10 - n100 * 100) % 10000) / 1000;
+    // Set the selected cathode pin to HIGH to display to digit
+    CATHODE_PORT |= digit_cathodes[c];
+    DELAY_DEBUG
 
-  int digits[] = { n1000, n100, n10, n1 };
-  for (int c = 0; c < 4; c++) {
-    int digit = digits[c];
-    digitalWrite(cathodes[c], HIGH);
-    DELAY_DEBUG
-    digitalWrite(ANODE_A_PIN, ANODE_A_STATE(digit));
-    DELAY_DEBUG
-    digitalWrite(ANODE_B_PIN, ANODE_B_STATE(digit));
-    DELAY_DEBUG
-    digitalWrite(ANODE_C_PIN, ANODE_C_STATE(digit));
-    DELAY_DEBUG
-    digitalWrite(ANODE_D_PIN, ANODE_D_STATE(digit));
-    DELAY_DEBUG
-    digitalWrite(ANODE_E_PIN, ANODE_E_STATE(digit));
-    DELAY_DEBUG
-    digitalWrite(ANODE_F_PIN, ANODE_F_STATE(digit));
-    DELAY_DEBUG
-    digitalWrite(ANODE_G_PIN, ANODE_G_STATE(digit));
+    // Let the persistence of vision do his job
     delay(DELAY);
-    digitalWrite(cathodes[c], LOW);
-    DELAY_DEBUG
   }
 }
 
